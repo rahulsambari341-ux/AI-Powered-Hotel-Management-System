@@ -1,0 +1,215 @@
+#!/usr/bin/env python
+"""
+Quick test of booking state extraction and update logic.
+"""
+
+import sys
+sys.path.insert(0, '.')
+
+from app.agents.conversation import (
+    _extract_dates_from_text,
+    _extract_guest_count_from_text,
+    _extract_room_type_from_text,
+    _extract_customer_details_from_text,
+    _extract_room_selection_from_text,
+    _update_booking_state,
+    _format_booking_state_for_prompt,
+)
+
+def test_dates():
+    print("=" * 60)
+    print("TEST: Date Extraction")
+    print("=" * 60)
+    
+    test_cases = [
+        "I want a room from December 20, 2027 to December 22, 2027",
+        "2027-12-20 to 2027-12-22",
+        "December 20 to December 22, 2027",
+    ]
+    
+    for text in test_cases:
+        result = _extract_dates_from_text(text)
+        print(f"\nInput: {text}")
+        print(f"Output: {result}")
+        assert result.get("check_in") and result.get("check_out"), f"Failed to extract dates from: {text}"
+    
+    print("\n✓ Date extraction tests passed!")
+
+def test_guests():
+    print("\n" + "=" * 60)
+    print("TEST: Guest Count Extraction")
+    print("=" * 60)
+    
+    test_cases = [
+        ("for 2 adults", {"adults": 2}),
+        ("3 guests", {"adults": 3}),
+        ("2 adults and 1 child", {"adults": 2, "children": 1}),
+    ]
+    
+    for text, expected in test_cases:
+        result = _extract_guest_count_from_text(text)
+        print(f"\nInput: {text}")
+        print(f"Output: {result}")
+        for key, value in expected.items():
+            assert result.get(key) == value, f"Expected {key}={value}, got {result.get(key)}"
+    
+    print("\n✓ Guest extraction tests passed!")
+
+def test_room_type():
+    print("\n" + "=" * 60)
+    print("TEST: Room Type Extraction")
+    print("=" * 60)
+    
+    test_cases = [
+        ("I want a Deluxe room", "Deluxe"),
+        ("book a premium room", "Premium"),
+        ("Suite please", "Suite"),
+    ]
+    
+    for text, expected in test_cases:
+        result = _extract_room_type_from_text(text)
+        print(f"\nInput: {text}")
+        print(f"Output: {result}")
+        assert result == expected, f"Expected {expected}, got {result}"
+    
+    print("\n✓ Room type extraction tests passed!")
+
+def test_customer_details():
+    print("\n" + "=" * 60)
+    print("TEST: Customer Details Extraction")
+    print("=" * 60)
+    
+    test_cases = [
+        ("My name is Rahul", {"customer_name": "Rahul"}),
+        ("My phone is 9876543210", {"customer_phone": "9876543210"}),
+        ("Contact me at test@example.com", {"customer_email": "test@example.com"}),
+    ]
+    
+    for text, expected_key in test_cases:
+        result = _extract_customer_details_from_text(text)
+        print(f"\nInput: {text}")
+        print(f"Output: {result}")
+        for key, expected_value in expected_key.items():
+            assert result.get(key) == expected_value, f"Expected {key}={expected_value}, got {result.get(key)}"
+    
+    print("\n✓ Customer details extraction tests passed!")
+
+def test_room_selection():
+    print("\n" + "=" * 60)
+    print("TEST: Room Selection Extraction")
+    print("=" * 60)
+    
+    test_cases = [
+        ("I want Room 102", "102"),
+        ("Book room number 106", "106"),
+        ("Can I get Room 104?", "104"),
+    ]
+    
+    for text, expected_room_number in test_cases:
+        result = _extract_room_selection_from_text(text)
+        print(f"\nInput: {text}")
+        print(f"Output: {result}")
+        assert result.get("selected_room_number") == expected_room_number, f"Expected room {expected_room_number}, got {result.get('selected_room_number')}"
+    
+    print("\n✓ Room selection extraction tests passed!")
+
+def test_state_update():
+    print("\n" + "=" * 60)
+    print("TEST: Booking State Update")
+    print("=" * 60)
+    
+    initial_state = {
+        "check_in": None,
+        "check_out": None,
+        "adults": None,
+        "children": 0,
+        "room_type": None,
+        "selected_room_id": None,
+        "selected_room_number": None,
+        "customer_name": None,
+        "customer_phone": None,
+        "customer_email": None,
+        "dates_validated": False,
+        "availability_checked": False,
+    }
+    
+    # Test 1: Add dates
+    message1 = "I want a room from December 20, 2027 to December 22, 2027 for 2 adults"
+    state1 = _update_booking_state(initial_state, message1)
+    
+    print(f"\nMessage 1: {message1}")
+    print(f"State: check_in={state1['check_in']}, check_out={state1['check_out']}, adults={state1['adults']}")
+    assert state1["check_in"] == "2027-12-20"
+    assert state1["check_out"] == "2027-12-22"
+    assert state1["adults"] == 2
+    assert state1["availability_checked"] == False  # Should be false initially
+    
+    # Test 2: Add room type (should not invalidate dates)
+    message2 = "I prefer Deluxe rooms"
+    state2 = _update_booking_state(state1, message2)
+    
+    print(f"\nMessage 2: {message2}")
+    print(f"State: room_type={state2['room_type']}, check_in={state2['check_in']}")
+    assert state2["room_type"] == "Deluxe"
+    assert state2["check_in"] == "2027-12-20"  # Should be preserved
+    
+    # Test 3: Add customer details
+    message3 = "My name is Rahul and my phone is 9876543210"
+    state3 = _update_booking_state(state2, message3)
+    
+    print(f"\nMessage 3: {message3}")
+    print(f"State: name={state3['customer_name']}, phone={state3['customer_phone']}")
+    assert state3["customer_name"] == "Rahul"
+    assert state3["customer_phone"] == "9876543210"
+    assert state3["room_type"] == "Deluxe"  # Should be preserved
+    
+    print("\n✓ State update tests passed!")
+
+def test_state_formatting():
+    print("\n" + "=" * 60)
+    print("TEST: Booking State Formatting for Prompt")
+    print("=" * 60)
+    
+    state = {
+        "check_in": "2027-12-20",
+        "check_out": "2027-12-22",
+        "adults": 2,
+        "children": 0,
+        "room_type": "Deluxe",
+        "selected_room_id": None,
+        "selected_room_number": None,
+        "customer_name": "Rahul",
+        "customer_phone": "9876543210",
+        "customer_email": None,
+        "dates_validated": False,
+        "availability_checked": False,
+    }
+    
+    formatted = _format_booking_state_for_prompt(state)
+    print(f"\nFormatted state:\n{formatted}")
+    
+    assert "2027-12-20" in formatted
+    assert "2 adults" in formatted or "Adults: 2" in formatted
+    assert "Deluxe" in formatted
+    assert "Rahul" in formatted
+    
+    print("\n✓ State formatting tests passed!")
+
+if __name__ == "__main__":
+    try:
+        test_dates()
+        test_guests()
+        test_room_type()
+        test_customer_details()
+        test_room_selection()
+        test_state_update()
+        test_state_formatting()
+        
+        print("\n" + "=" * 60)
+        print("✅ ALL TESTS PASSED!")
+        print("=" * 60)
+    except Exception as e:
+        print(f"\n❌ TEST FAILED: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

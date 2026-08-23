@@ -1,0 +1,19 @@
+# Environment
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# MySQL data (if bind-mounted)
+mysql_data/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

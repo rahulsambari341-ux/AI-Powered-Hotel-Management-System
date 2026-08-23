@@ -1,0 +1,15 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+pymysql==1.1.1
+python-dotenv==1.0.1
+cryptography==43.0.1
+openai==2.53.0
+faster-whisper==1.0.3
+python-multipart==0.0.9
+twilio==9.3.2
+redis==8.1.0
+slowapi==0.1.10
+kokoro
+soundfile
+numpy

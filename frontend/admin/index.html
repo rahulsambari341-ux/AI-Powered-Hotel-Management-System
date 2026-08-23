@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABC Hotel — Staff Dashboard</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="admin.css">
+</head>
+
+<body>
+
+<div class="dash">
+
+  <!-- HEADER -->
+  <header class="dash-header">
+    <div class="brand">
+      <span class="brand-mark">AH</span>
+
+      <div>
+        <h1>ABC Hotel</h1>
+        <p class="brand-sub">Staff Dashboard</p>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <span
+        class="no-auth-badge"
+        title="Authentication is planned for a later security-hardening phase"
+      >
+        No login required (yet)
+      </span>
+
+      <button class="refresh-btn" id="refreshBtn">
+        Refresh
+      </button>
+    </div>
+  </header>
+
+
+  <!-- LOAD STATUS -->
+  <p class="load-status" id="loadStatus">
+    Loading live data…
+  </p>
+
+
+  <!-- ========================= -->
+  <!-- STAT CARDS - STEP 2 -->
+  <!-- ========================= -->
+
+  <section class="stat-grid" id="statGrid" hidden>
+
+    <!-- OCCUPANCY -->
+    <div class="stat-card clickable-card" data-filter="occupancy">
+      <p class="stat-label">Occupancy</p>
+
+      <p class="stat-value mono" id="statOccupancy">
+        —
+      </p>
+
+      <p class="stat-sub" id="statOccupancySub">
+        — occupied / — total
+      </p>
+    </div>
+
+
+    <!-- REVENUE -->
+    <div class="stat-card clickable-card" data-filter="revenue">
+      <p class="stat-label">Revenue</p>
+
+      <p class="stat-value mono" id="statRevenue">
+        —
+      </p>
+
+      <p class="stat-sub">
+        confirmed + completed bookings
+      </p>
+    </div>
+
+
+    <!-- TODAY'S BOOKINGS -->
+    <div class="stat-card clickable-card" data-filter="today">
+      <p class="stat-label">Today's Bookings</p>
+
+      <p class="stat-value mono" id="statToday">
+        —
+      </p>
+
+      <p class="stat-sub">
+        reservations made today
+      </p>
+    </div>
+
+
+    <!-- TOTAL BOOKINGS -->
+    <div class="stat-card clickable-card" data-filter="all-bookings">
+      <p class="stat-label">Total Bookings</p>
+
+      <p class="stat-value mono" id="statTotal">
+        —
+      </p>
+
+      <p class="stat-sub" id="statBreakdown">
+        — confirmed · — cancelled
+      </p>
+    </div>
+
+
+    <!-- CANCELLED BOOKINGS -->
+    <div class="stat-card clickable-card" data-filter="cancelled">
+      <p class="stat-label">Cancelled Bookings</p>
+
+      <p class="stat-value mono" id="statCancelled">
+        —
+      </p>
+
+      <p class="stat-sub">
+        cancelled reservations
+      </p>
+    </div>
+
+
+    <!-- MODIFIED BOOKINGS -->
+    <div class="stat-card clickable-card" data-filter="modified">
+      <p class="stat-label">Modified Bookings</p>
+
+      <p class="stat-value mono" id="statModified">
+        —
+      </p>
+
+      <p class="stat-sub">
+        updated reservations
+      </p>
+    </div>
+
+
+    <!-- AVAILABLE ROOMS -->
+    <div class="stat-card clickable-card" data-filter="available rooms">
+      <p class="stat-label">Available Rooms</p>
+
+      <p class="stat-value mono" id="statAvailable">
+        —
+      </p>
+
+      <p class="stat-sub" id="statAvailableSub">
+        of — total rooms
+      </p>
+    </div>
+
+
+    <!-- CUSTOMERS -->
+    <div class="stat-card clickable-card" data-filter="customers">
+      <p class="stat-label">Customers</p>
+
+      <p class="stat-value mono" id="statCustomers">
+        —
+      </p>
+
+      <p class="stat-sub">
+        unique guests on file
+      </p>
+    </div>
+
+  </section>
+
+
+  <!-- ================================= -->
+  <!-- STEP 2: CLICKED CARD DETAILS -->
+  <!-- ================================= -->
+
+  <section class="panel" id="filterPanel" hidden>
+
+    <div class="filter-header">
+
+      <h2 id="filterTitle">
+        Details
+      </h2>
+
+      <button
+        class="close-filter-btn"
+        id="closeFilterBtn"
+        type="button"
+      >
+        Close
+      </button>
+
+    </div>
+
+
+    <div class="table-wrap">
+
+      <table id="filterTable">
+
+        <thead id="filterHead">
+        </thead>
+
+        <tbody id="filterBody">
+
+          <tr>
+            <td class="empty-row">
+              Select a dashboard card.
+            </td>
+          </tr>
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </section>
+
+
+  <!-- ========================= -->
+  <!-- RECENT BOOKINGS -->
+  <!-- ========================= -->
+
+  <section class="panel">
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <h2 style="margin: 0;">Recent Bookings</h2>
+        <!-- New Booking Button -->
+        <button onclick="openNewBookingModal()" style="padding: 6px 12px; background: #10b981; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600;">+ New Booking</button>
+      </div>
+
+      <!-- Search Input Box -->
+      <input 
+        type="text" 
+        id="bookingSearchInput" 
+        placeholder="Search by ID, guest, room, date..." 
+        onkeyup="filterRecentBookings()" 
+        style="padding: 6px 12px; width: 260px; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px; font-size: 13px;"
+      >
+    </div>
+
+    <div class="table-wrap">
+
+      <table id="bookingsTable">
+
+        <thead>
+
+          <tr>
+            <th>Booking ID</th>
+            <th>Guest</th>
+            <th>Room</th>
+            <th>Check-in</th>
+            <th>Check-out</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+
+        </thead>
+
+
+        <tbody id="bookingsBody">
+
+          <tr>
+            <td colspan="8" class="empty-row">
+              Loading…
+            </td>
+          </tr>
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </section>
+
+
+  <!-- ========================= -->
+  <!-- CUSTOMERS -->
+  <!-- ========================= -->
+
+  <section class="panel">
+
+    <h2>
+      Customers
+    </h2>
+
+    <div class="table-wrap">
+
+      <table id="customersTable">
+
+        <thead>
+
+          <tr>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>Bookings</th>
+          </tr>
+
+        </thead>
+
+
+        <tbody id="customersBody">
+
+          <tr>
+            <td colspan="4" class="empty-row">
+              Loading…
+            </td>
+          </tr>
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </section>
+
+</div>
+
+
+<!-- NEW BOOKING MODAL -->
+<div id="newBookingModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:#1e293b; padding:24px; border-radius:8px; width:420px; color:#fff; box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto;">
+    <h3>Create New Booking</h3>
+    
+    <label style="display:block; margin-top:10px; font-size:13px; color:#cbd5e1;">Guest Name:</label>
+    <input type="text" id="newCustomerName" style="width:100%; padding:6px; margin-top:2px; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px;">
+
+    <label style="display:block; margin-top:10px; font-size:13px; color:#cbd5e1;">Phone Number:</label>
+    <input type="text" id="newCustomerPhone" style="width:100%; padding:6px; margin-top:2px; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px;" placeholder="10-digit mobile number">
+
+    <label style="display:block; margin-top:10px; font-size:13px; color:#cbd5e1;">Email (Optional):</label>
+    <input type="email" id="newCustomerEmail" style="width:100%; padding:6px; margin-top:2px; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px;">
+    
+    <!-- ADDED: Adults & Children Inputs under Email -->
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <div style="flex:1;">
+        <label style="display:block; font-size:13px; color:#cbd5e1;">Adults:</label>
+        <input type="number" id="newAdults" value="1" min="1" style="width:100%; padding:6px; margin-top:2px; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px;">
+      </div>
+      <div style="flex:1;">
+        <label style="display:block; font-size:13px; color:#cbd5e1;">Children:</label>
+        <input type="number" id="newChildren" value="0" min="0" style="width:100%; padding:6px; margin-top:2px; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px;">
+      </div>
+    </div>
+
+    <label style="display:block; margin-top:10px; font-size:13px; color:#cbd5e1;">Select Available Room:</label>
+    <select id="newRoomSelect" onchange="calculateBookingAmount()" style="width:100%; padding:6px; margin-top:2px; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px;">
+      <option value="">Loading available rooms...</option>
+    </select>
+
+    <label style="display:block; margin-top:10px; font-size:13px; color:#cbd5e1;">Check-In Date:</label>
+    <input type="date" id="newCheckIn" onchange="calculateBookingAmount()" style="width:100%; padding:6px; margin-top:2px; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px;">
+    
+    <label style="display:block; margin-top:10px; font-size:13px; color:#cbd5e1;">Check-Out Date:</label>
+    <input type="date" id="newCheckOut" onchange="calculateBookingAmount()" style="width:100%; padding:6px; margin-top:2px; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px;">
+
+    <label style="display:block; margin-top:10px; font-size:13px; color:#cbd5e1;">Total Amount (₹):</label>
+    <input type="number" id="newTotalAmount" readonly style="width:100%; padding:6px; margin-top:2px; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px; opacity: 0.8;">
+
+    <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:8px;">
+      <button type="button" onclick="closeNewBookingModal()" style="padding:6px 12px; background:#475569; color:#fff; border:none; border-radius:4px; cursor:pointer;">Cancel</button>
+      <button type="button" onclick="submitNewBooking()" style="padding:6px 12px; background:#10b981; color:#fff; border:none; border-radius:4px; cursor:pointer;">Create Booking</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXISTING CONFIG -->
+<script src="config.js"></script>
+
+<!-- EXISTING ADMIN JS -->
+<script src="admin.js"></script>
+
+</body>
+</html>

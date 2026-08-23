@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABC Hotel — AI Reception</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div class="desk">
+
+    <!-- Left: reception panel -->
+    <aside class="reception">
+      <div class="reception__mark">ABC</div>
+      <h1 class="reception__title">ABC Hotel</h1>
+      <p class="reception__subtitle">AI Reception Desk</p>
+
+      <div class="mic-wrap">
+        <button id="micButton" class="mic" aria-label="Hold to speak" type="button">
+          <span class="mic__ring mic__ring--1"></span>
+          <span class="mic__ring mic__ring--2"></span>
+          <span class="mic__core">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6">
+              <rect x="9" y="2" width="6" height="12" rx="3"/>
+              <path d="M5 10a7 7 0 0 0 14 0"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+          </span>
+        </button>
+        <p id="micStatus" class="mic-status">Tap to speak</p>
+      </div>
+
+      <div class="ledger-note">
+        <p><strong>Room types</strong></p>
+        <ul id="roomTypeList" class="ledger-note__list">
+          <li>Loading room types…</li>
+        </ul>
+      </div>
+
+      <div class="session-line">
+        Session <span id="sessionIdLabel" class="mono"></span>
+        <button id="resetButton" class="reset-btn" type="button">New conversation</button>
+      </div>
+    </aside>
+
+    <!-- Right: conversation ledger -->
+    <main class="ledger">
+      <div id="transcript" class="transcript" aria-live="polite">
+        <div class="entry entry--ai">
+          <div class="entry__meta"><span class="entry__who">Reception</span><span class="entry__time mono"></span></div>
+          <div class="entry__text">Welcome to ABC Hotel. Tap the seal on the left and tell me how I can help — a booking, room availability, or a question about the hotel.</div>
+        </div>
+      </div>
+
+      <form id="textForm" class="composer">
+        <input id="textInput" class="composer__input" type="text" placeholder="…or type your message" autocomplete="off">
+        <button class="composer__send" type="submit" aria-label="Send">Send</button>
+      </form>
+    </main>
+
+  </div>
+
+  <audio id="replayAudio" hidden></audio>
+
+<script src="config.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
