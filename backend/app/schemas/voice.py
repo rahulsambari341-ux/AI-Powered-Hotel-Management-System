@@ -15,3 +15,4 @@ class TranscribeResponse(BaseModel):
 class SynthesizeRequest(BaseModel):
     text: str
     voice: str | None = None
+    language: str | None = None

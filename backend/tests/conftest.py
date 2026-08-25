@@ -57,6 +57,7 @@ os.environ["RATE_LIMIT_ENABLED"] = "false"
 # Imports
 # ============================================================
 
+
 import pytest
 
 from fastapi.testclient import TestClient
@@ -100,46 +101,62 @@ def _setup_test_database():
     try:
 
         # ----------------------------------------------------
-        # Seed rooms
+        # Reset and seed canonical test rooms
         # ----------------------------------------------------
 
-        if db.query(Room).count() == 0:
+        db.execute(
+          __import__("sqlalchemy").text(
+            "SET FOREIGN_KEY_CHECKS=0"
+          )
+       )
 
-            db.add_all(
-                [
-                    Room(
-                        room_number="101",
-                        room_type="Standard",
-                        price_per_night=1800,
-                        capacity=2,
-                        status="available",
-                    ),
+        db.execute(
+          __import__("sqlalchemy").text(
+            "TRUNCATE TABLE rooms"
+          )
+        )
 
-                    Room(
-                        room_number="102",
-                        room_type="Deluxe",
-                        price_per_night=2500,
-                        capacity=2,
-                        status="available",
-                    ),
+        db.execute(
+          __import__("sqlalchemy").text(
+            "SET FOREIGN_KEY_CHECKS=1"
+          )
+        )
 
-                    Room(
-                        room_number="103",
-                        room_type="Premium",
-                        price_per_night=4000,
-                        capacity=3,
-                        status="available",
-                    ),
+        db.add_all(
+         [
+          Room(
+            room_number="101",
+            room_type="Standard",
+            price_per_night=1800,
+            capacity=2,
+            status="available",
+        ),
 
-                    Room(
-                        room_number="104",
-                        room_type="Suite",
-                        price_per_night=7000,
-                        capacity=4,
-                        status="available",
-                    ),
-                ]
-            )
+        Room(
+            room_number="102",
+            room_type="Deluxe",
+            price_per_night=2500,
+            capacity=2,
+            status="available",
+        ),
+
+        Room(
+            room_number="103",
+            room_type="Premium",
+            price_per_night=4000,
+            capacity=3,
+            status="available",
+        ),
+
+        Room(
+            room_number="104",
+            room_type="Suite",
+            price_per_night=7000,
+            capacity=4,
+            status="available",
+        ),
+    ]
+)
 
         # ----------------------------------------------------
         # Seed hotel information
@@ -251,9 +268,12 @@ def db_session():
 
 @pytest.fixture
 def client():
-
-    return TestClient(app)
-
+    return TestClient(
+        app,
+        headers={
+            "Authorization": "Bearer change-this-development-admin-token"
+        },
+    )
 
 # ============================================================
 # Sample Room IDs

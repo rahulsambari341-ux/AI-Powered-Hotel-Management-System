@@ -11,7 +11,7 @@ import time
 API_URL = "http://localhost:8000/ai/chat"
 SESSION_ID = "test-conv-001"
 
-def test_conversation(message: str, test_name: str):
+def conversation_test(message: str, test_name: str):
     """Send a message and return the response"""
     print(f"\n{'='*60}")
     print(f"TEST: {test_name}")
@@ -52,7 +52,7 @@ def main():
     print(f"Session ID: {SESSION_ID}")
     
     # Test 1: Send dates, adults, room type in one message
-    data1, reply1 = test_conversation(
+    data1, reply1 = conversation_test(
         "I want to book a room from December 20, 2027 to December 22, 2027 for 2 adults",
         "Full booking info in one message"
     )
@@ -61,7 +61,7 @@ def main():
         return
     
     # Test 2: Book confirmation - should NOT ask for dates again
-    data2, reply2 = test_conversation(
+    data2, reply2 = conversation_test(
         "Yes, please book that",
         "Confirmation (should NOT repeat date questions)"
     )

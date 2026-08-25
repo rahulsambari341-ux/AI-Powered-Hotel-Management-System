@@ -31,6 +31,7 @@ from typing import Optional
 import random
 
 from app.database.db import get_db
+from app.admin_auth import require_admin
 from app.schemas.admin import AdminStats, RecentBooking, AdminCustomer
 from app.models import Booking, Room, Customer
 from app.services.admin_service import (
@@ -46,7 +47,11 @@ from app.services.admin_service import (
     get_room_revenue,
 )
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 @router.get("/stats", response_model=AdminStats)

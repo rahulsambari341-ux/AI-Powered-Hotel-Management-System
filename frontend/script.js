@@ -94,19 +94,34 @@ async function sendToChat(message, detectedLanguage = null) {
   return data.reply;
 }
 
-async function synthesizeAndPlay(text) {
+async function synthesizeAndPlay(text, language = null) {
   const res = await fetch(`${API_BASE}/voice/synthesize`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, language }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail || "Could not synthesize speech");
   }
   const audioBlob = await res.blob();
-  replayAudio.src = URL.createObjectURL(audioBlob);
-  await replayAudio.play();
+  const audioUrl = URL.createObjectURL(audioBlob);
+  
+  replayAudio.src = audioUrl;
+  replayAudio.preload = "auto";
+  
+  // Force load and instant play without waiting for full buffer event queues
+  replayAudio.load();
+  try {
+    replayAudio.currentTime = 0;
+    const playPromise = replayAudio.play();
+    if (playPromise !== undefined) {
+      await playPromise;
+    }
+  } catch (e) {
+    // Handle autoplay restrictions if any
+  }
+
   return new Promise((resolve) => {
     replayAudio.onended = resolve;
   });
@@ -138,7 +153,7 @@ async function runTurn(userText, { speakReply = false, detectedLanguage = null, 
     if (speakReply && isCallActive && currentGen === callGeneration) {
       setMicState("speaking", "Speaking…");
       try {
-        await synthesizeAndPlay(reply);
+        await synthesizeAndPlay(reply, detectedLanguage);
       } catch (ttsErr) {
         // Audio playback interrupted
       }

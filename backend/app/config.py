@@ -30,6 +30,11 @@ class Settings:
         "development",
     )
 
+    ADMIN_TOKEN: str = os.getenv(
+    "ADMIN_TOKEN",
+    "",
+   )
+
     # ========================================================
     # Database
     # ========================================================
@@ -186,7 +191,84 @@ class Settings:
 
 
 # ============================================================
+# Production security validation
+# ============================================================
+
+def validate_production_security(settings: Settings) -> None:
+    """
+    Validate security-critical configuration before production startup.
+
+    Development environments are intentionally allowed to use local
+    development defaults. Production environments must provide real
+    secrets
+    and must not use known development values.
+    """
+
+    if settings.APP_ENV.lower() != "production":
+        return
+
+    errors = []
+
+    # --------------------------------------------------------
+    # Admin authentication
+    # --------------------------------------------------------
+
+    if not settings.ADMIN_TOKEN:
+        errors.append("ADMIN_TOKEN is required in production.")
+
+    if settings.ADMIN_TOKEN == "change-this-development-admin-token":
+        errors.append(
+            "ADMIN_TOKEN must not use the development default in production."
+        )
+
+    # --------------------------------------------------------
+    # Database
+    # --------------------------------------------------------
+
+    if not settings.MYSQL_USER:
+        errors.append("MYSQL_USER is required in production.")
+
+    if not settings.MYSQL_PASSWORD:
+        errors.append("MYSQL_PASSWORD is required in production.")
+
+    if not settings.MYSQL_DATABASE:
+        errors.append("MYSQL_DATABASE is required in production.")
+
+    # --------------------------------------------------------
+    # CORS
+    # --------------------------------------------------------
+
+    if not settings.CORS_ORIGINS.strip():
+        errors.append("CORS_ORIGINS must be configured in production.")
+
+    if "null" in {
+        origin.strip().lower()
+        for origin in settings.CORS_ORIGINS.split(",")
+    }:
+        errors.append(
+            "CORS_ORIGINS must not contain 'null' in production."
+        )
+
+    # --------------------------------------------------------
+    # Production URL
+    # --------------------------------------------------------
+
+    if settings.PUBLIC_BASE_URL.startswith("http://localhost"):
+        errors.append(
+            "PUBLIC_BASE_URL must not point to localhost in production."
+        )
+
+    if errors:
+        raise RuntimeError(
+            "Production security validation failed:\n- "
+            + "\n- ".join(errors)
+        )
+
+
+# ============================================================
 # Shared settings instance
 # ============================================================
 
 settings = Settings()
+
+validate_production_security(settings)

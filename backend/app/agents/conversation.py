@@ -24,6 +24,7 @@ SUPPORTED_LANGUAGES = {
     "te": "Telugu",
     "ta": "Tamil",
 }
+DEFAULT_LANGUAGE = "en"
 
 _SESSION_PREFIX = "conversation:"
 _MAX_HISTORY = 40
@@ -35,11 +36,10 @@ _ROOM_TYPES = {
     "premium": "Premium",
     "suite": "Suite",
 }
-
 _BASE_PROMPT = """
-You are the AI receptionist for ABC Hotel.
-
--->> THE CURRENT YEAR IS 2026. <<--
+You are Chitti, the AI receptionist and virtual assistant for ABC Hotel. 
+MANDATORY IDENTITY RULE: If any customer asks your name, who you are, or what you are called, you MUST always reply: "I am Chitti, the AI receptionist of ABC Hotel." Never say you are just a generic virtual assistant.
+-->> CURRENT EXACT DATETIME: Today is {{current_date}} {{current_month}} (Year: {{current_year}}) {{current_time}}. <<--
 
 You help customers:
 - check room availability
@@ -50,8 +50,8 @@ You help customers:
 - answer factual hotel questions
 
 CRITICAL DATE & YEAR VALIDATION RULE:
-- Always verify if the dates or years provided by the customer are in the future relative to the current year (2026).
-- If a customer specifies a past year or date (e.g., 2019, 2021, or any year in the past), politely correct them: "That date is in the past. Our hotel bookings are open for future dates like 2026 or 2029. Could you please provide valid future dates?"
+- Always verify if the dates or years provided by the customer are in the future relative to the current year ({current_year}).
+- If a customer specifies a past year or date (e.g., any year in the past), politely correct them: "That date is in the past. Our hotel bookings are open for future dates like {current_year} or later. Could you please provide valid future dates?"
 
 Never invent availability, prices, booking IDs, room numbers, or policies.
 Never invent hotel names (the only hotel name is ABC Hotel).
@@ -64,15 +64,20 @@ IMPORTANT FLOW RULES:
 3. A complete date range must be validated before availability is checked.
 4. Never guess a missing year.
 5. Never silently change a customer-provided year.
-6. Customers choose human-facing room numbers, not internal room IDs.
-7. A new booking requires an actual available room.
-8. A booking is created only after explicit customer confirmation.
-9. Cancellation requires explicit customer confirmation.
-10. Modification requires explicit customer confirmation.
-11. Never turn a modification into a new booking.
-12. Never expose internal database IDs or tool JSON.
-13. Reply naturally in the customer's language.
-14. If a tool reports an error, explain it naturally.
+6. When repeating or displaying booking dates to the customer, ALWAYS use the exact structured ISO format from controller state:
+   Check-in: YYYY-MM-DD
+   Check-out: YYYY-MM-DD
+7. Never convert controller dates into natural-language formats such as "October 10th, 2029".
+8. The customer's spoken date format may be natural, but the displayed date must always be YYYY-MM-DD.
+9. Customers choose human-facing room numbers, not internal room IDs.
+10. A new booking requires an actual available room.
+11. A booking is created only after explicit customer confirmation.
+12. Cancellation requires explicit customer confirmation.
+13. Modification requires explicit customer confirmation.
+14. Never turn a modification into a new booking.
+15. Never expose internal database IDs or tool JSON.
+16. Reply naturally in the customer's language.
+17. If a tool reports an error, explain it naturally.
 
 CRITICAL RULE: The LLM MUST NEVER claim that a booking is confirmed, created, or successful unless the backend database has successfully generated a real booking ID (BKxxxx).
 """
@@ -216,52 +221,203 @@ def _guest_counts(text: str) -> tuple[int | None, int | None]:
 
 
 def _parse_month_date(raw: str) -> str | None:
-    cleaned = re.sub(r"(\d{1,2})(st|nd|rd|th)", r"\1", raw)
+    cleaned = re.sub(r"(\d{1,2})(st|nd|rd|th)", r"\1", raw, flags=re.I)
     cleaned = cleaned.replace(",", " ").strip()
 
-    formats = ("%B %d %Y", "%b %d %Y", "%d %B %Y", "%d %b %Y")
+    formats = (
+        "%B %d %Y",
+        "%b %d %Y",
+        "%d %B %Y",
+        "%d %b %Y",
+    )
+
     for fmt in formats:
         try:
-            return datetime.strptime(cleaned, fmt).date().isoformat()
+            parsed = datetime.strptime(cleaned, fmt).date()
+            today = date.today()
+            if parsed < today:
+                return None
+            return parsed.isoformat()
         except ValueError:
             continue
+
     return None
 
-
 def _extract_dates(text: str) -> tuple[str | None, str | None]:
-    iso = re.findall(r"\b\d{4}-\d{1,2}-\d{1,2}\b", text)
-    if len(iso) >= 2:
-        try:
-            return date.fromisoformat(iso[0]).isoformat(), date.fromisoformat(iso[1]).isoformat()
-        except ValueError:
-            return None, None
+    """
+    Extract exactly two booking dates.
+
+    Supported:
+        2027-01-01
+        January 1st, 2027
+        1 January 2027
+        01/01/2027
+        01-01-2027
+
+    Important:
+        The year is never guessed.
+        Past dates and impossible calendar dates are rejected.
+    """
+
+    # --------------------------------------------------------
+    # ISO dates
+    # --------------------------------------------------------
+
+    iso_matches = re.findall(
+        r"\b\d{4}-\d{1,2}-\d{1,2}\b",
+        text,
+    )
+
+    if len(iso_matches) >= 2:
+        parsed = []
+
+        for value in iso_matches[:2]:
+            try:
+                parsed_date = date.fromisoformat(value)
+                today = date.today()
+                if parsed_date < today:
+                    return None, None
+                parsed.append(parsed_date.isoformat())
+            except ValueError:
+                return None, None
+
+        return parsed[0], parsed[1]
+
+    # --------------------------------------------------------
+    # Month-name dates
+    # --------------------------------------------------------
 
     month = (
         r"(?:January|February|March|April|May|June|July|August|"
-        r"September|October|November|December|Jan|Feb|Mar|Apr|"
-        r"Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
+        r"September|October|November|December|"
+        r"Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
     )
-    month_pattern = rf"\b{month}\s+\d{{1,2}}(?:st|nd|rd|th)?[,]?\s+\d{{4}}\b"
-    month_matches = re.findall(month_pattern, text, re.I)
+
+    month_pattern = (
+        rf"\b{month}\s+"
+        r"\d{1,2}"
+        r"(?:st|nd|rd|th)?"
+        r"[,]?\s+"
+        r"\d{4}\b"
+    )
+
+    month_matches = re.findall(
+        month_pattern,
+        text,
+        re.I,
+    )
 
     if len(month_matches) >= 2:
-        return _parse_month_date(month_matches[0]), _parse_month_date(month_matches[1])
+        first = _parse_month_date(month_matches[0])
+        second = _parse_month_date(month_matches[1])
 
-    numeric = re.findall(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b", text)
+        if first and second:
+            return first, second
+
+    # --------------------------------------------------------
+    # Numeric dates (MM/DD/YYYY or DD/MM/YYYY)
+    # --------------------------------------------------------
+
+    numeric = re.findall(
+        r"\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b",
+        text,
+    )
+
     if len(numeric) >= 2:
         parsed = []
+        today = date.today()
+
         for value in numeric[:2]:
-            a, b, year = [int(x) for x in re.split(r"[/-]", value)]
-            try:
-                parsed.append(date(year, b, a).isoformat())
-            except ValueError:
+            a, b, year = [
+                int(x)
+                for x in re.split(r"[/-]", value)
+            ]
+
+            candidates = (
+                (year, b, a),  # DD/MM/YYYY
+                (year, a, b),  # MM/DD/YYYY
+            )
+
+            valid_date = None
+
+            for y, month_value, day_value in candidates:
                 try:
-                    parsed.append(date(year, a, b).isoformat())
+                    candidate_date = date(y, month_value, day_value)
+                    if candidate_date < today:
+                        continue
+                    valid_date = candidate_date.isoformat()
+                    break
                 except ValueError:
-                    return None, None
+                    continue
+
+            if valid_date is None:
+                return None, None
+
+            parsed.append(valid_date)
+
         return parsed[0], parsed[1]
 
     return None, None
+
+def _validate_date_range(
+    check_in: str | None,
+    check_out: str | None,
+) -> tuple[bool, str | None]:
+    """
+    Controller-level date safety check.
+
+    Does not replace validate_booking_dates tool.
+    It prevents obviously invalid dates from entering
+    the booking state.
+    """
+
+    if not check_in or not check_out:
+        return False, "Both check-in and check-out dates are required."
+
+    try:
+        check_in_date = date.fromisoformat(check_in)
+        check_out_date = date.fromisoformat(check_out)
+    except ValueError:
+        return False, "The provided booking dates are invalid."
+
+    today = date.today()
+
+    if check_in_date < today:
+        return False, "The check-in date is in the past."
+
+    if check_out_date <= check_in_date:
+        return False, "Check-out must be after check-in."
+
+    return True, None
+
+def _normalize_phone_number(raw_phone: str) -> str | None:
+    """
+    Normalize and validate an Indian mobile number.
+
+    Accepted:
+        9098909890
+        +91 9098909890
+        +91-9098909890
+        91 9098909890
+
+    Returns exactly 10 digits or None.
+    """
+
+    if not raw_phone:
+        return None
+
+    digits = re.sub(r"\D", "", raw_phone)
+
+    if digits.startswith("91") and len(digits) == 12:
+        digits = digits[2:]
+
+    if len(digits) != 10:
+        return None
+
+    if digits[0] not in "6789":
+        return None
+
+    return digits
 
 
 def _customer_details(text: str) -> dict[str, str | None]:
@@ -271,35 +427,139 @@ def _customer_details(text: str) -> dict[str, str | None]:
         "customer_email": None,
     }
 
-    phone = re.search(r"(?<!\d)(?:\+?91[-\s]?)?[6-9]\d{9}(?!\d)", text)
-    if phone:
-        result["customer_phone"] = re.sub(r"\D", "", phone.group(0))[-10:]
+    # --------------------------------------------------------
+    # Phone number
+    # --------------------------------------------------------
 
-    email = re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", text, re.I)
+    phone_patterns = (
+        r"(?<!\d)(?:\+?91[\s-]?)?[6-9](?:[\s-]?\d){9}(?!\d)",
+        r"(?<!\d)91[\s-]?[6-9](?:[\s-]?\d){9}(?!\d)",
+    )
+
+    for pattern in phone_patterns:
+        phone = re.search(pattern, text, re.I)
+        if phone:
+            normalized_phone = _normalize_phone_number(phone.group(0))
+            if normalized_phone:
+                result["customer_phone"] = normalized_phone
+                break
+
+    # --------------------------------------------------------
+    # Email - Standard format
+    # --------------------------------------------------------
+     # Normalize common STT email speech
+    email_text = re.sub(r"\s+at\s+", "@", text, flags=re.I)
+    email_text = re.sub(r"\s+dot\s+", ".", email_text, flags=re.I)
+
+    email = re.search(
+        r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
+        text,
+        re.I,
+    )
+    
+
     if email:
-        result["customer_email"] = email.group(0)
+        result["customer_email"] = email.group(0).lower()
+    else:
+        # --------------------------------------------------------
+        # Email - Voice patterns: "sundar at gmail dot com"
+        # --------------------------------------------------------
+        
+        # Voice email forms:
+        #   "sundar at gmail dot com"
+        #   "sundar at gmail.com"
+        # Normalize only when the complete address is unambiguous.
+        voice_email_patterns = (
+            r"\b([A-Za-z0-9._%+-]+)\s+at\s+([A-Za-z0-9.-]+)\s+dot\s+([A-Za-z]{2,})\b",
+            r"\b([A-Za-z0-9._%+-]+)\s+at\s+([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b",
+        )
+
+        for voice_email_pattern in voice_email_patterns:
+            voice_match = re.search(voice_email_pattern, text, re.I)
+            if not voice_match:
+                continue
+
+            if len(voice_match.groups()) == 3:
+                username, domain, tld = (g.lower() for g in voice_match.groups())
+                normalized_email = f"{username}@{domain}.{tld}"
+            else:
+                username, domain = (g.lower() for g in voice_match.groups())
+                normalized_email = f"{username}@{domain}"
+
+            if re.fullmatch(
+                r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+                normalized_email,
+            ):
+                result["customer_email"] = normalized_email
+                break
+
+    # --------------------------------------------------------
+    # Customer name
+    # --------------------------------------------------------
 
     patterns = (
         r"\bmy name is\s+([A-Za-z][A-Za-z .'-]{1,60})",
         r"\bname is\s+([A-Za-z][A-Za-z .'-]{1,60})",
         r"\bi am\s+([A-Za-z][A-Za-z .'-]{1,60})",
     )
+
     for pattern in patterns:
         match = re.search(pattern, text, re.I)
+
         if match:
-            name = re.split(r"\b(?:my phone|phone number|email|and)\b", match.group(1), maxsplit=1, flags=re.I)[0].strip(" .,-")
+            name = re.split(
+                r"\b(?:my phone|phone number|mobile|email|and)\b",
+                match.group(1),
+                maxsplit=1,
+                flags=re.I,
+            )[0].strip(" .,-")
+
             if name:
                 result["customer_name"] = name
                 break
 
+    # --------------------------------------------------------
+    # "Samir 9098909890" style input
+    # --------------------------------------------------------
+
     if not result["customer_name"] and result["customer_phone"]:
-        without_email = re.sub(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "", text, flags=re.I)
-        without_phone = re.sub(r"(?:\+?91[-\s]?)?[6-9]\d{9}", "", without_email).strip(" ,.-")
-        if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,60}", without_phone) and not any(k in without_phone.lower() for k in ["room", "deluxe", "standard", "yes"]):
-            result["customer_name"] = without_phone
+        without_email = re.sub(
+            r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
+            "",
+            text,
+            flags=re.I,
+        )
+
+        without_phone = re.sub(
+            r"(?:\+?91[\s-]?)?[6-9](?:[\s-]?\d){9}",
+            "",
+            without_email,
+            flags=re.I,
+        ).strip(" ,.-")
+
+        if re.fullmatch(
+            r"[A-Za-z][A-Za-z .'-]{1,60}",
+            without_phone,
+        ):
+            lowered_name = without_phone.lower()
+
+            if not any(
+                word in lowered_name
+                for word in (
+                    "room",
+                    "deluxe",
+                    "standard",
+                    "premium",
+                    "suite",
+                    "yes",
+                    "phone",
+                    "mobile",
+                )
+            ):
+                result["customer_name"] = without_phone
+                result["customer_phone"] = normalized_phone
 
     return result
-
 
 def _hotel_info_topic(text: str) -> str | None:
     lowered = _clean(text).lower()
@@ -328,33 +588,97 @@ def _is_cancel(text: str) -> bool:
 def _is_modify(text: str) -> bool:
     lowered = text.lower()
     modify_phrases_and_keywords = [
-        # English
         "modify", "change", "update", "alter", "edit", "reschedule",
         "change my booking", "modify my reservation", "update my dates",
         "change my check out", "change checkin", "update details",
-        # Telugu / Tanglish
         "మార్చు", "మార్చాలి", "మార్పు", "మార్చండి", "marchu", "maarchu", "marchandi",
         "modify cheyyandi", "change cheyyandi", "update cheyyandi", "booking marchandi",
-        # Hindi / Hinglish
         "बदलो", "बदलना", "परिवर्तन", "संशोधन", "badlo", "badalna", 
         "modify karo", "change karo", "update karo",
-        # Tamil / Tanglish
         "மாற்று", "மாற்ற வேண்டும்", "booking maatru"
     ]
-    has_keyword = any(phrase in lowered for phrase in modify_phrases_and_keywords)
-    return bool(has_keyword)
+    return bool(any(phrase in lowered for phrase in modify_phrases_and_keywords))
 
 
 def _is_new_booking(text: str) -> bool:
-    return bool(
-        re.search(r"\b(?:book|booking|reserve|reservation)\b", text, re.I) or
-        re.search(r"\b(?:want|need|looking for|get|find)\s+(?:a|an|the)?\s*room\b", text, re.I) or
-        re.search(r"\b(?:adults?|suite|deluxe|standard|premium)\b", text, re.I)
+    lowered = text.lower()
+    fresh_start = bool(
+        re.search(r"\b(?:fresh|restart|new booking|start over)\b", lowered) or
+        (re.search(r"\b(?:want|need|looking for|book|reserve)\b", lowered) and not _is_modify(text) and not _is_cancel(text))
     )
+    return fresh_start
+
+
+# --- ADDED: Helper to safely catch requests asking for booking details ---
+def _is_details_request(text: str) -> bool:
+    lowered = text.lower()
+    keywords = ["details", "my details", "booking details", "show me", "information", "status", "summary"]
+    return any(k in lowered for k in keywords) and not _is_modify(text) and not _is_cancel(text) and not _is_new_booking(text)
 
 
 def _affirmative(text: str) -> bool:
     return bool(re.search(r"\b(?:yes|yeah|yep|sure|correct|confirm|confirmed|go ahead|do it|book it|proceed)\b", text, re.I))
+
+
+def _is_explicit_booking_confirmation(text: str) -> bool:
+    """
+    Detect EXPLICIT booking confirmation intent.
+    
+    Only return True for clear confirmation phrases:
+    - "yes confirm"
+    - "confirm the booking"
+    - "yes book it"
+    - "yes proceed"
+    - etc.
+    
+    NOT triggered by:
+    - "yes I'm thankful"
+    - "yes that's fine"
+    - "yes exactly"
+    - "yes check availability"
+    """
+    lowered = text.lower()
+    
+    explicit_patterns = [
+        r"\byes.*(?:confirm|book|proceed|create|reserve)",
+        r"\b(?:confirm|book|reserve|proceed).*(?:the booking|it|reservation)",
+        r"\b(?:go ahead|do it|book it)\b",
+    ]
+    
+    for pattern in explicit_patterns:
+        if re.search(pattern, lowered):
+            return True
+    
+    return False
+
+
+def _build_booking_summary(state: dict[str, Any]) -> str:
+    """
+    Build a deterministic summary of the booking state.
+    
+    Shows all validated booking details.
+    """
+    lines = ["Here is your booking summary:"]
+    
+    guest = state.get("customer_name", "N/A")
+    phone = state.get("customer_phone", "N/A")
+    email = state.get("customer_email") or "Not provided"
+    room_num = state.get("selected_room_number", "N/A")
+    room_type = state.get("room_type", "N/A")
+    checkin = state.get("check_in", "N/A")
+    checkout = state.get("check_out", "N/A")
+    adults = state.get("adults", "N/A")
+    children = state.get("children", 0)
+    
+    lines.append(f"  Guest: {guest}")
+    lines.append(f"  Phone: {phone}")
+    lines.append(f"  Email: {email}")
+    lines.append(f"  Room: {room_type} (#{room_num})")
+    lines.append(f"  Check-in: {checkin}")
+    lines.append(f"  Check-out: {checkout}")
+    lines.append(f"  Guests: {adults} adult(s), {children} child(ren)")
+    
+    return "\n".join(lines)
 
 
 def _negative(text: str) -> bool:
@@ -364,7 +688,11 @@ def _negative(text: str) -> bool:
 def _route(session: dict[str, Any], text: str) -> str:
     if _is_cancel(text) or _is_modify(text):
         return "existing_booking_action"
-    if _is_new_booking(text) or session.get("booking_state", {}).get("check_in"):
+    if _is_new_booking(text):
+        session["booking_state"] = _new_booking_state()
+        session["pending_action"] = None
+        return "new_booking"
+    if session.get("booking_state", {}).get("check_in"):
         return "new_booking"
     existing = session.get("flow_stage")
     if existing in {"new_booking", "existing_booking_action"}:
@@ -381,6 +709,14 @@ def _invalidate_room_state(state: dict[str, Any]) -> None:
 
 def _update_state(state: dict[str, Any], text: str) -> None:
     check_in, check_out = _extract_dates(text)
+    if check_in and check_out:
+        valid_range, _ = _validate_date_range(
+            check_in,
+            check_out,
+        )
+
+        if not valid_range:
+            return
     if check_in and check_in != state.get("check_in"):
         state["check_in"] = check_in
         state["dates_validated"] = False
@@ -466,14 +802,10 @@ def _modify_after_confirmation(session: dict[str, Any]) -> str:
     if mod.get("customer_email"):
         arguments["customer_email"] = mod["customer_email"]
 
-    # Debug print to terminal
-    print(f"DEBUG MODIFY ARGUMENTS: {arguments}")
-
     result = _safe_tool("modify_booking_tool", arguments)
     _apply_tool_result(session, "modify_booking_tool", result)
 
     if result.get("booking_id") and "error" not in result:
-        # Dynamically build summary of what was successfully changed
         changes_desc = []
         if result.get("room_id") or mod.get("room_number"):
             changes_desc.append(f"Room: {mod.get('room_number') or result.get('room_id')}")
@@ -493,11 +825,12 @@ def _modify_after_confirmation(session: dict[str, Any]) -> str:
             changes_desc.append(f"Email: {result.get('customer_email')}")
     
         summary_text = ", ".join(changes_desc) if changes_desc else "details"
-        state["modification"] = {}  # Clear pending modifications
+        state["modification"] = {}
         return f"Booking {booking_id} has been successfully modified in the database! Updated {summary_text}."
     
     err = result.get('error', 'Unknown modification error')
     return f"I couldn't modify that booking: {err}"
+
 
 def _safe_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     func = TOOL_FUNCTIONS.get(name)
@@ -532,8 +865,11 @@ def _apply_tool_result(session: dict[str, Any], tool_name: str, result: dict[str
                     state["selected_room_id"] = room.get("room_id")
                     break
             
+            # Only auto-select by room_type if explicitly EXACTLY ONE matches
             if not state.get("selected_room_id") and state.get("room_type"):
                 matching = [r for r in rooms if r.get("room_type", "").lower() == state["room_type"].lower()]
+                # Auto-select ONLY if exactly one room of that type is available
+                # If multiple rooms of the same type, we MUST ask the user
                 if len(matching) == 1:
                     state["selected_room_id"] = matching[0].get("room_id")
                     state["selected_room_number"] = str(matching[0].get("room_number"))
@@ -559,6 +895,47 @@ def _apply_tool_result(session: dict[str, Any], tool_name: str, result: dict[str
             session["last_booking_id"] = result["booking_id"]
             session["pending_action"] = None
             session["flow_stage"] = "existing_booking_action"
+
+
+def _get_available_rooms_for_selection(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Return available rooms that the user may need to choose from.
+    
+    If a room_type is specified, return only rooms of that type.
+    Otherwise, return all available rooms.
+    """
+    available = state.get("available_rooms", [])
+    
+    if state.get("room_type"):
+        return [r for r in available if r.get("room_type", "").lower() == state["room_type"].lower()]
+    
+    return available
+
+
+def _needs_room_selection(state: dict[str, Any]) -> bool:
+    """
+    Returns True if the user needs to select a room.
+    
+    Returns False only if:
+    1. A specific room_number has been selected and exists in available rooms, OR
+    2. A room_type is specified and exactly one room of that type is available
+    """
+    
+    if not state.get("availability_checked"):
+        return False
+    
+    if state.get("selected_room_id"):
+        return False
+    
+    available_for_selection = _get_available_rooms_for_selection(state)
+    
+    if len(available_for_selection) == 0:
+        return False
+    
+    if len(available_for_selection) == 1:
+        return False
+    
+    return True
 
 
 def _selected_room_id(state: dict[str, Any]) -> int | None:
@@ -592,6 +969,40 @@ def _booking_ready(state: dict[str, Any]) -> tuple[bool, str | None]:
         state["selected_room_id"] = _selected_room_id(state)
     elif not state.get("selected_room_id") and state.get("room_type"):
         state["selected_room_id"] = _selected_room_id(state)
+    phone = str(state.get("customer_phone") or "")
+
+    if not re.fullmatch(r"[6-9]\d{9}", phone):
+        return False, "valid 10-digit phone number"
+
+    # Revalidate the date range at the final controller gate.
+    valid_dates, date_error = _validate_date_range(
+        state.get("check_in"),
+        state.get("check_out"),
+    )
+    if not valid_dates:
+        return False, date_error or "valid booking dates"
+
+    # If an email is present, it must be a complete normalized address.
+    email = state.get("customer_email")
+    if email and not re.fullmatch(
+        r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+        str(email),
+    ):
+        return False, "valid email address"
+
+    # The selected room must belong to the CURRENT availability result.
+    selected_room_id = state.get("selected_room_id")
+    if selected_room_id is not None:
+        current_room = next(
+            (
+                room for room in state.get("available_rooms", [])
+                if str(room.get("room_id")) == str(selected_room_id)
+            ),
+            None,
+        )
+        if current_room is None:
+            state["selected_room_id"] = None
+            return False, "a currently available room"
 
     required = (
         ("check_in", "check-in date"),
@@ -644,29 +1055,49 @@ def _run_booking_preflight(session: dict[str, Any]) -> None:
 
 
 def _build_system_prompt(language: str | None, booking_state: dict[str, Any] | None = None) -> str:
-    prompt = _BASE_PROMPT
+    today = datetime.today()
+    current_year = today.year
+    current_date = today.strftime("%A, %B %d, %Y")
+    current_month = today.strftime("%B")
+    current_time = today.strftime("%I:%M %p")
     
-    # Language handling
+    # Safely format all datetime values into the base prompt
+    prompt = _BASE_PROMPT.format(
+        current_year=current_year, 
+        current_date=current_date, 
+        current_month=current_month,
+        current_time=current_time
+    )
+    
     if language and language in SUPPORTED_LANGUAGES and language != "en":
         lang_name = SUPPORTED_LANGUAGES[language]
         prompt += f"""
 
-UNIVERSAL LANGUAGE RULE: The customer has been speaking
-{lang_name}
-in this conversation.
-- Continue replying in {lang_name}.
-- STYLE MATCHING: Match the exact style and language used in the user's latest message:
-  * If the user typed in native script (e.g., తెలుగు, हिन्दी, தமிழ்), reply back in that same native script.
-  * If the user typed using English letters / phonetic script (Tanglish, Hinglish), reply back using English letters (phonetic script).
+UNIVERSAL LANGUAGE RULE:
+- The customer has been speaking {lang_name} in this conversation.
+- The detected conversation language is {lang_name}.
+- Continue replying in {lang_name} unless the customer's latest message clearly uses another language.
+- STYLE MATCHING: Match the exact style and script used in the user's latest message.
+  * If the user uses native script, reply in the same native script.
+  * If the user uses English letters / phonetic script, reply using the same style when appropriate.
+  * If the user mixes languages, understand the complete meaning and reply naturally in the dominant language.
 - Never output database error strings like `:mysqlUnicode:`.
+- Preserve names, phone numbers, email addresses, dates, room numbers, booking IDs, room types, and prices exactly.
 - Keep all hotel facts, room types (Standard, Deluxe, Premium, Suite), prices, and ABC Hotel identity strictly accurate.
 """
     else:
-        prompt += """
+       prompt += """
 
-UNIVERSAL LANGUAGE RULE: 
-- You MUST communicate strictly in standard, professional English. 
-- Never switch to any other unrequested language remember it.
+UNIVERSAL LANGUAGE RULE:
+- Understand and respond naturally in the language used by the customer.
+- The customer may use ANY human language, including languages not listed in SUPPORTED_LANGUAGES.
+- Do NOT force English when the customer speaks another language.
+- If the customer mixes languages, understand the complete meaning and reply naturally using the dominant language of the latest message.
+- If the customer uses native script, reply in the same native script.
+- If the customer uses phonetic English letters for another language, reply naturally in the same phonetic style when appropriate.
+- Do not translate the customer's message into English unless the customer asks for translation.
+- Preserve all important booking entities exactly: names, phone numbers, email addresses, dates, room numbers, booking IDs, room types, and prices.
+- Never invent missing information.
 - Keep all hotel facts, room types (Standard, Deluxe, Premium, Suite), prices, and ABC Hotel identity strictly accurate.
 """
 
@@ -674,6 +1105,12 @@ UNIVERSAL LANGUAGE RULE:
         prompt += "\nCURRENT CONTROLLER STATE:\n" + json.dumps(booking_state, ensure_ascii=False) + "\n"
         
     return prompt
+# 1. First define the helper function here
+def _is_date_inquiry(text: str) -> bool:
+    lowered = text.lower()
+    keywords = ["today", "current date", "what date", "what is today", "date today", "month today", "year today"]
+    return any(k in lowered for k in keywords)
+
 def run_turn(
     session_id: str,
     user_message: str,
@@ -689,6 +1126,36 @@ def run_turn(
         session["language"] = detected_language
 
     state = session["booking_state"]
+
+# --- ADD THIS: Date Inquiry Handler ---
+    if _is_date_inquiry(text):
+        today_str = date.today().strftime("%B %d, %Y")
+        reply = f"Today is {today_str}. How can I help you with your room reservation?"
+        session["messages"].append({"role": "user", "content": text})
+        session["messages"].append({"role": "assistant", "content": reply})
+        _save_session(session_id, session)
+        return reply
+
+    # --- ADDED: Handle details request smoothly without re-confirming booking ---
+    if _is_details_request(text):
+        target_id = session.get("last_booking_id")
+        if target_id:
+            reply = (
+                f"Here are your booking details for ID {target_id}:\n"
+                f"- **Guest Name**: {state.get('customer_name', 'N/A')}\n"
+                f"- **Phone**: {state.get('customer_phone', 'N/A')}\n"
+                f"- **Room**: {state.get('selected_room_number', 'N/A')} ({state.get('room_type', 'Standard')})\n"
+                f"- **Check-in**: {state.get('check_in', 'N/A')}\n"
+                f"- **Check-out**: {state.get('check_out', 'N/A')}\n"
+                f"- **Adults**: {state.get('adults', 1)}, **Children**: {state.get('children', 0)}"
+            )
+        else:
+            reply = "You don't have an active booking session right now. Would you like to check room availability and make a reservation?"
+        
+        session["messages"].append({"role": "user", "content": text})
+        session["messages"].append({"role": "assistant", "content": reply})
+        _save_session(session_id, session)
+        return reply
 
     _update_state(state, text)
 
@@ -790,41 +1257,69 @@ def run_turn(
         _run_booking_preflight(session)
 
     ready, missing = _booking_ready(state)
+    
+    # Handle room selection when multiple rooms available
+    if ready and _needs_room_selection(state):
+        available_for_selection = _get_available_rooms_for_selection(state)
+        room_numbers = ", ".join(str(r.get("room_number")) for r in available_for_selection)
+        reply = f"We have {len(available_for_selection)} {state.get('room_type', 'rooms')} available: {room_numbers}. Which room would you like?"
+        session["messages"].append({"role": "user", "content": text})
+        session["messages"].append({"role": "assistant", "content": reply})
+        _save_session(session_id, session)
+        return reply
+    
     if ready and session["flow_stage"] == "new_booking":
-        if _affirmative(text) or session.get("pending_action") == "confirm_booking":
-            if session.get("last_booking_id"):
+        # Check for explicit booking confirmation only when pending_action is confirm_booking
+        if session.get("pending_action") == "confirm_booking" and _is_explicit_booking_confirmation(text):
+            # Final gate check before creating booking
+            if session.get("last_booking_id") and not _is_new_booking(text):
                 reply = f"Your booking is already confirmed under booking ID {session['last_booking_id']}."
             else:
                 room_id = _selected_room_id(state)
-                tool_res = _safe_tool("create_booking_tool", {
-                    "room_id": room_id,
-                    "customer_name": state["customer_name"],
-                    "customer_phone": state["customer_phone"],
-                    "customer_email": state.get("customer_email"),
-                    "check_in": state["check_in"],
-                    "check_out": state["check_out"],
-                    "adults": int(state["adults"]),
-                    "children": int(state.get("children") or 0),
-                })
-                _apply_tool_result(session, "create_booking_tool", tool_res)
-                bk_id = tool_res.get("booking_id")
                 
-                if bk_id:
-                    session["last_booking_id"] = bk_id
-                    session["pending_action"] = None
-                    session["flow_stage"] = "existing_booking_action"
-                    reply = f"Booking confirmed! Your booking ID is {bk_id}. Room is reserved from {tool_res.get('check_in', state['check_in'])} to {tool_res.get('check_out', state['check_out'])}. Total amount: ₹{tool_res.get('total_amount')}."
+                # Re-verify all booking gates one final time
+                final_ready, final_missing = _booking_ready(state)
+                if not final_ready:
+                    reply = f"Before proceeding, I need: {final_missing}."
                 else:
-                    err = tool_res.get("error", "Room unavailable")
-                    reply = f"Could not complete booking: {err}"
+                    tool_res = _safe_tool("create_booking_tool", {
+                        "room_id": room_id,
+                        "customer_name": state["customer_name"],
+                        "customer_phone": state["customer_phone"],
+                        "customer_email": state.get("customer_email"),
+                        "check_in": state["check_in"],
+                        "check_out": state["check_out"],
+                        "adults": int(state["adults"]),
+                        "children": int(state.get("children") or 0),
+                    })
+                    _apply_tool_result(session, "create_booking_tool", tool_res)
+                    bk_id = tool_res.get("booking_id")
+                    
+                    if isinstance(bk_id, str) and re.fullmatch(r"BK\d{4,}", bk_id):
+                        session["last_booking_id"] = bk_id
+                        session["pending_action"] = None
+                        session["flow_stage"] = "existing_booking_action"
+                        reply = f"Booking confirmed! Your booking ID is {bk_id}. Room is reserved from {tool_res.get('check_in', state['check_in'])} to {tool_res.get('check_out', state['check_out'])}. Total amount: ₹{tool_res.get('total_amount')}."
+                    else:
+                        err = tool_res.get("error", "The booking was not confirmed by the database.")
+                        reply = f"Could not complete booking: {err}"
             
             session["messages"].append({"role": "user", "content": text})
             session["messages"].append({"role": "assistant", "content": reply})
             _save_session(session_id, session)
             return reply
-        else:
+        elif session.get("pending_action") != "confirm_booking":
+            # Show summary and ask for confirmation
             session["pending_action"] = "confirm_booking"
-            reply = f"I have all your details from {state.get('check_in')} to {state.get('check_out')}. Would you like me to confirm this booking?"
+            summary = _build_booking_summary(state)
+            reply = summary + "\n\nEverything looks correct? Please say 'yes, confirm the booking' to proceed."
+            session["messages"].append({"role": "user", "content": text})
+            session["messages"].append({"role": "assistant", "content": reply})
+            _save_session(session_id, session)
+            return reply
+        else:
+            # pending_action == "confirm_booking" but not explicit confirmation
+            reply = "I'm ready to book! Please confirm by saying 'yes, confirm the booking' or 'yes, book it'."
             session["messages"].append({"role": "user", "content": text})
             session["messages"].append({"role": "assistant", "content": reply})
             _save_session(session_id, session)

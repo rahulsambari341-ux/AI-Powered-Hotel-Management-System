@@ -228,6 +228,7 @@ def synthesize(
         audio_bytes = synthesize_speech(
             payload.text,
             voice=voice,
+            language=payload.language,
         )
 
     except RuntimeError as e:

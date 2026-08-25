@@ -8,19 +8,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System packages needed to build some Python deps (e.g. cryptography,
-# pymysql's underlying C extensions) and for faster-whisper's audio handling.
+# System packages needed to build some Python deps and for
+# faster-whisper's audio handling.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies first (separate layer) so code changes don't
-# force a full dependency reinstall on every rebuild.
+# Install Python dependencies first so code changes don't
+# force a full dependency reinstall.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Create an unprivileged application user
+RUN useradd --create-home --shell /usr/sbin/nologin appuser
+
+# Run the application as non-root
+USER appuser
 
 EXPOSE 8000
 
