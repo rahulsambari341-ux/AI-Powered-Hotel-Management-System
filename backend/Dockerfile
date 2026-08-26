@@ -31,4 +31,4 @@ USER appuser
 EXPOSE 8000
 
 # No --reload in production - that's a dev-only convenience flag.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "python -m app.database.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
