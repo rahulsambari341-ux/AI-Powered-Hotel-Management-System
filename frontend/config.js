@@ -5,4 +5,4 @@
 // e.g. "https://api.yourhotel.com". This is the ONLY file that needs
 // editing to point the frontend at a different backend - script.js reads
 // this value instead of hardcoding a URL.
-window.HOTEL_API_BASE = "http://localhost:8000";
+window.HOTEL_API_BASE = "https://ai-powered-hotel-management-system-production.up.railway.app";
