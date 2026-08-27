@@ -165,6 +165,17 @@ def admin_update_booking(booking_id: str, payload: BookingUpdate, db: Session = 
         booking.children = payload.children
     if payload.booking_status is not None:
         booking.booking_status = payload.booking_status
+
+    # Recalculate total amount after modification
+    room = db.query(Room).filter(Room.id == booking.room_id).first()
+    if not room:
+         raise HTTPException(status_code=404, detail="Room not found")
+
+    nights = (booking.check_out - booking.check_in).days
+    if nights <= 0:
+         raise HTTPException(status_code=400, detail="Check-out must be after check-in")
+
+    booking.total_amount = room.price_per_night * nights
         
     booking.is_modified = True
     db.commit()
