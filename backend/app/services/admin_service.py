@@ -98,6 +98,8 @@ def get_recent_bookings(db: Session, limit: int = 20) -> list[dict]:
             "room_type": b.room.room_type if b.room else None,
             "check_in": str(b.check_in),
             "check_out": str(b.check_out),
+            "adults": b.adults,
+            "children": b.children,
             "total_amount": float(b.total_amount),
             "booking_status": b.booking_status,
             "created_at": b.created_at.isoformat() if b.created_at else None,
