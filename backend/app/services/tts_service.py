@@ -71,7 +71,6 @@ def get_tts_pipeline() -> KPipeline:
 def synthesize_speech(
     text: str,
     voice: str = DEFAULT_VOICE,
-    language: str | None = None,
 ) -> bytes:
     """
     Convert text into WAV audio bytes using local Kokoro TTS.
