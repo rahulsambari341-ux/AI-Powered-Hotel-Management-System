@@ -295,7 +295,7 @@ def call_llm(messages: list[dict], tools: list[dict]) -> LLMReply:
                 f"(model '{settings.OLLAMA_MODEL}'). Is Ollama running and has the model "
                 f"been pulled ('ollama pull {settings.OLLAMA_MODEL}')? Original error: {e}"
             ) from e
-         if provider == "groq":
+        if provider == "groq":
             raise RuntimeError(
                 f"Groq API request failed: {e}"
             ) from e
