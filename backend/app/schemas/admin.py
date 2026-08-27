@@ -23,6 +23,8 @@ class RecentBooking(BaseModel):
     room_type: str | None
     check_in: str
     check_out: str
+    adults: int
+    children: int
     total_amount: float
     booking_status: str
     created_at: str | None
