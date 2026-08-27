@@ -92,7 +92,28 @@ SAFE_TOOL_SCHEMAS = [
     s for s in TOOL_SCHEMAS
     if s.get("function", {}).get("name") not in _TRANSACTIONAL_TOOL_NAMES
 ]
+def _get_safe_tool_schemas(state: dict[str, Any]) -> list[dict]:
+    """
+    Only expose availability tool when all parameters required
+    for availability are already known.
+    """
 
+    schemas = []
+
+    for schema in SAFE_TOOL_SCHEMAS:
+        name = schema.get("function", {}).get("name")
+
+        if name == "check_room_availability":
+            if (
+                not state.get("check_in")
+                or not state.get("check_out")
+                or state.get("adults") is None
+            ):
+                continue
+
+        schemas.append(schema)
+
+    return schemas
 
 def _new_booking_state() -> dict[str, Any]:
     return {
@@ -1041,7 +1062,7 @@ def _run_booking_preflight(session: dict[str, Any]) -> None:
     if state.get("availability_checked"):
         return
 
-    if state.get("room_type") is None and state.get("adults") is None:
+    if state.get("adults") is None:
         return
 
     args: dict[str, Any] = {"check_in": state["check_in"], "check_out": state["check_out"]}
