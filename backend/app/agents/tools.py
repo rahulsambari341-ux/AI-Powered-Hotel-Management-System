@@ -521,22 +521,31 @@ TOOL_SCHEMAS = [
         },
         ["check_in", "check_out"],
     ),
+
     _function_schema(
         "check_room_availability",
-        "Return real rooms available for the requested dates.",
+        "Return real rooms available for the requested dates and number of adults. "
+        "Only call this tool when check_in, check_out, and adults are known. "
+        "Never send null, empty, or missing values.",
         {
-            "check_in": {"type": "string", "description": "YYYY-MM-DD"},
-            "check_out": {"type": "string", "description": "YYYY-MM-DD"},
+            "check_in": {
+                "type": "string",
+                "description": "Required. Check-in date in YYYY-MM-DD format.",
+            },
+            "check_out": {
+                "type": "string",
+                "description": "Required. Check-out date in YYYY-MM-DD format.",
+            },
             "room_type": {
                 "type": "string",
-                "description": "Standard, Deluxe, Premium, or Suite",
+                "description": "Optional. Standard, Deluxe, Premium, or Suite.",
             },
             "adults": {
                 "type": "integer",
-                "description": "Minimum room capacity required",
+                "description": "Required. Number of adults staying. Must be at least 1.",
             },
         },
-        ["check_in", "check_out"],
+        ["check_in", "check_out", "adults"],
     ),
     _function_schema(
         "get_room_details",
