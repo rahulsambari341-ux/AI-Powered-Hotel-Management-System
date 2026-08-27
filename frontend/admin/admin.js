@@ -276,14 +276,19 @@ function renderBookings(bookings) {
       </td>
 
       <td>
-        <button
-          onclick="adminCancel('${b.booking_id}')"
-          style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:12px; margin-right:4px;"
-        >
-          Cancel
-        </button>
+        ${
+          String(b.booking_status ?? "").toLowerCase() === "cancelled" ||
+          String(b.booking_status ?? "").toLowerCase() === "completed"
+           ? ""
+           : `
+          <button
+            onclick="adminCancel('${b.booking_id}')"
+            style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:12px; margin-right:4px;"
+          >
+            Cancel
+           </button>
 
-        <button
+           <button
           onclick="adminModify(
             '${b.booking_id}',
             '${String(b.customer_name ?? "").replace(/'/g, "\\'")}',
@@ -294,7 +299,9 @@ function renderBookings(bookings) {
         >
           Modify
         </button>
-      </td>
+      `
+     }
+    </td>
     </tr>
   `
     )
