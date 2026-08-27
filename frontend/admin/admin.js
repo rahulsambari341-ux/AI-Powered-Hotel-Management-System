@@ -267,6 +267,10 @@ function renderBookings(bookings) {
 
       <td class="mono">${b.check_out ?? "—"}</td>
 
+      <td class="mono">${b.adults ?? 0}</td>
+
+      <td class="mono">${b.children ?? 0}</td>
+
       <td class="mono">${money(b.total_amount)}</td>
 
       <td>
