@@ -93,6 +93,21 @@ class Settings:
         "qwen2.5:7b-instruct",
     )
 
+    LLM_API_KEY: str = os.getenv(
+        "LLM_API_KEY",
+        "",
+    )
+
+    LLM_BASE_URL: str = os.getenv(
+        "LLM_BASE_URL",
+        "",
+    )
+
+    LLM_MODEL: str = os.getenv(
+        "LLM_MODEL",
+        "",
+    )
+
     # ========================================================
     # Telephony
     # ========================================================
