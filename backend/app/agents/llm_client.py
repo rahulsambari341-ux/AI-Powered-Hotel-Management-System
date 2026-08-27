@@ -38,6 +38,28 @@ class LLMReply:
 
 _openai_client: OpenAI | None = None
 _ollama_client: OpenAI | None = None
+_groq_client: OpenAI | None = None
+
+def _get_groq_client() -> OpenAI:
+    global _groq_client
+
+    if not settings.LLM_API_KEY:
+        raise RuntimeError(
+            "LLM_API_KEY is not set. Add your Groq API key to Railway variables."
+        )
+
+    if not settings.LLM_BASE_URL:
+        raise RuntimeError(
+            "LLM_BASE_URL is not set. Add the Groq OpenAI-compatible base URL."
+        )
+
+    if _groq_client is None:
+        _groq_client = OpenAI(
+            base_url=settings.LLM_BASE_URL,
+            api_key=settings.LLM_API_KEY,
+        )
+
+    return _groq_client
 
 
 def _get_openai_client() -> OpenAI:
@@ -64,13 +86,20 @@ def _get_ollama_client() -> OpenAI:
 
 def _get_active_client_and_model() -> tuple[OpenAI, str]:
     provider = settings.LLM_PROVIDER
+
     if provider == "ollama":
         return _get_ollama_client(), settings.OLLAMA_MODEL
+
     if provider == "openai":
         return _get_openai_client(), "gpt-4o-mini"
+
+    if provider == "groq":
+        return _get_groq_client(), settings.LLM_MODEL
+
     raise RuntimeError(
-        f"Unknown LLM_PROVIDER '{provider}'. Set it to 'openai' or 'ollama' in .env."
-    )
+        f"Unknown LLM_PROVIDER '{provider}'. "
+        "Set it to 'openai', 'ollama', or 'groq' in .env."
+    ) 
 
 
 def get_client() -> OpenAI:
@@ -266,7 +295,11 @@ def call_llm(messages: list[dict], tools: list[dict]) -> LLMReply:
                 f"(model '{settings.OLLAMA_MODEL}'). Is Ollama running and has the model "
                 f"been pulled ('ollama pull {settings.OLLAMA_MODEL}')? Original error: {e}"
             ) from e
-        raise RuntimeError(f"OpenAI API request failed: {e}") from e
+         if provider == "groq":
+            raise RuntimeError(
+                f"Groq API request failed: {e}"
+            ) from e
 
+        raise RuntimeError(f"OpenAI API request failed: {e}") from e
     raw_message = response.choices[0].message
     return _normalize_message(raw_message, tools)
